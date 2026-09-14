@@ -24,7 +24,7 @@ the usage.
 
 <!-- x-release-please-start-version -->
 ```shell
-zig fetch --save git+https://github.com/gabor-boros/yaap#v0.1.0
+zig fetch --save git+https://github.com/gabor-boros/yaap#v1.0.0
 ```
 <!-- x-release-please-end -->
 
