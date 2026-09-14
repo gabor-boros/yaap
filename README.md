@@ -23,9 +23,11 @@ the usage.
 **1. Fetch the package**
 
 <!-- x-release-please-start-version -->
+
 ```shell
-zig fetch --save git+https://github.com/gabor-boros/yaap#v1.0.0
+zig fetch --save git+https://github.com/gabor-boros/yaap#v0.1.0
 ```
+
 <!-- x-release-please-end -->
 
 **2. Wire it in `build.zig`**
