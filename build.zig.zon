@@ -1,6 +1,6 @@
 .{
     .name = .yaap,
-    .version = "0.1.0", // x-release-please-version
+    .version = "0.2.0", // x-release-please-version
     .fingerprint = 0x5285bac75f13e043, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0",
 
