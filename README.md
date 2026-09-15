@@ -12,8 +12,9 @@ the usage.
 ## Features
 
 - Positional arguments
+- Option default values
 - Long and short options (e.g., `-v`, `--verbose`)
-- Mixed positional arguments and options (`cmd -v arg1 --option)
+- Mixed positional arguments and options (`cmd -v arg1 --option`)
 - Subcommands (e.g., `cmd -v subcmd -a` )
 - Clear errors on missing values
 - Optional `-h | --help` option
