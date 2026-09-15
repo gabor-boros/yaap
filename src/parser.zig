@@ -19,6 +19,14 @@ pub const ValueKind = enum {
     string,
 };
 
+/// A flag default stored independently of the destination pointer type.
+pub const FlagValue = union(ValueKind) {
+    boolean: bool,
+    integer: i64,
+    float: f64,
+    string: []const u8,
+};
+
 /// A positional argument filled in registration order.
 pub const Arg = struct {
     /// The kind of the argument's value.
@@ -55,6 +63,8 @@ pub const Flag = struct {
     long: ?[]const u8,
     /// Help text used when printing usage.
     help: []const u8 = "",
+    /// Optional default used when the flag is omitted.
+    default: ?FlagValue = null,
     /// When true, matching this flag stops parse and sets `Parser.show_help`.
     is_help: bool = false,
 };
@@ -78,11 +88,14 @@ pub const ArgSpec = struct {
 };
 
 /// Spec for `addFlag`. At least `short` or `long` must be set.
-pub const FlagSpec = struct {
-    short: ?u8 = null,
-    long: ?[]const u8 = null,
-    help: ?[]const u8 = null,
-};
+pub fn FlagSpec(comptime T: type) type {
+    return struct {
+        short: ?u8 = null,
+        long: ?[]const u8 = null,
+        help: ?[]const u8 = null,
+        default: ?T = null,
+    };
+}
 
 /// Spec for `addCommand`.
 pub const CommandSpec = struct {
@@ -201,10 +214,50 @@ pub const Parser = struct {
         });
     }
 
+    /// Add a flag to the parser. If both `short` and `long` names are missing,
+    /// a compile time error is returned.
+    ///
+    /// `dest` must be a pointer to a mutable boolean, integer, float, or
+    /// string variable. The parser writes the parsed value into that variable.
+    ///
+    /// * The `short` parameter is the short name of the flag.
+    /// * The `long` parameter is the long name of the flag.
+    /// * The `help` parameter is the help text for the flag.
+    /// * The `default` parameter is used when the flag is omitted.
+    pub fn addFlag(self: *Parser, dest: anytype, comptime spec: FlagSpec(@TypeOf(dest.*))) !void {
+        if (spec.short == null and spec.long == null) {
+            @compileError("at least a short or long name must be set");
+        }
+
+        const kind = comptime valueKindFromDest(@TypeOf(dest));
+        const default: ?FlagValue = if (spec.default) |value|
+            switch (comptime kind) {
+                .boolean => .{ .boolean = value },
+                .integer => .{ .integer = @intCast(value) },
+                .float => .{ .float = @floatCast(value) },
+                .string => .{ .string = value },
+            }
+        else
+            null;
+
+        try self.flags.append(self.allocator, .{
+            .kind = kind,
+            .dest = @ptrCast(dest),
+            .short = spec.short,
+            .long = spec.long,
+            .help = spec.help orelse "",
+            .default = default,
+        });
+
+        // if (default) |value| assignFlagValue(@ptrCast(dest), value);
+    }
+
     /// Parse the command line arguments.
     ///
     /// Positionals are filled in registration order. Flags that take a value
     /// read the next token, or `--name=value`. Boolean flags take no value.
+    /// Flag defaults are written at the start of parse when the option is
+    /// omitted; a present value-taking flag still requires an argument.
     /// Missing required values return `error.MissingValue` and set `missing`
     /// to the flag or positional that still needs a value.
     ///
@@ -219,6 +272,13 @@ pub const Parser = struct {
         self.missing = null;
         self.command = null;
         self.selected = null;
+
+        // Apply flag defaults before parsing.
+        for (self.flags.items) |flag| {
+            if (flag.dest) |dest| {
+                if (flag.default) |default| assignFlagValue(dest, default);
+            }
+        }
 
         var i: usize = 0;
         var positional_index: usize = 0;
@@ -285,31 +345,6 @@ pub const Parser = struct {
         if (value.len == 0) return self.failMissing(flagDisplayName(token));
 
         try assignValue(flag.kind, flag.dest.?, value);
-    }
-
-    /// Add a flag to the parser. If both `short` and `long` names are missing,
-    /// a compile time error is returned.
-    ///
-    /// `dest` must be a pointer to a mutable boolean, integer, float, or
-    /// string variable. The parser writes the parsed value into that variable.
-    ///
-    /// * The `short` parameter is the short name of the flag.
-    /// * The `long` parameter is the long name of the flag.
-    /// * The `help` parameter is the help text for the flag.
-    pub fn addFlag(self: *Parser, dest: anytype, comptime spec: FlagSpec) !void {
-        if (spec.short == null and spec.long == null) {
-            @compileError("at least a short or long name must be set");
-        }
-
-        const kind = comptime valueKindFromDest(@TypeOf(dest));
-
-        try self.flags.append(self.allocator, .{
-            .kind = kind,
-            .dest = @ptrCast(dest),
-            .short = spec.short,
-            .long = spec.long,
-            .help = spec.help orelse "",
-        });
     }
 
     /// Register an optional help flag. When it is parsed, `show_help` is set
@@ -596,6 +631,28 @@ fn writeFlagHelp(writer: *std.Io.Writer, flag: Flag, width: usize) std.Io.Writer
         try writer.writeAll(flag.help);
     }
     try writer.writeByte('\n');
+}
+
+/// Writes a stored default through `dest`.
+fn assignFlagValue(dest: *anyopaque, value: FlagValue) void {
+    switch (value) {
+        .boolean => |v| {
+            const ptr: *bool = @ptrCast(@alignCast(dest));
+            ptr.* = v;
+        },
+        .integer => |v| {
+            const ptr: *i64 = @ptrCast(@alignCast(dest));
+            ptr.* = v;
+        },
+        .float => |v| {
+            const ptr: *f64 = @ptrCast(@alignCast(dest));
+            ptr.* = v;
+        },
+        .string => |v| {
+            const ptr: *[]const u8 = @ptrCast(@alignCast(dest));
+            ptr.* = v;
+        },
+    }
 }
 
 /// Parses `value` according to `kind` and writes it through `dest`.
