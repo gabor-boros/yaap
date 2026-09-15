@@ -5,7 +5,7 @@ const parser = @import("./parser.zig");
 const Parser = parser.Parser;
 const ValueKind = parser.ValueKind;
 
-test "Parser.addArg stores dest, name, help, and inferred kinds" {
+test "Parser.addArg stores dest, name, default, help, and inferred kinds" {
     var p = Parser.init(testing.allocator, "prog", .{});
     defer p.deinit();
 
@@ -53,13 +53,15 @@ test "Parser.addFlag adds a flag to the parser" {
     defer p.deinit();
 
     var verbose = false;
-    try p.addFlag(&verbose, .{ .short = 'v', .long = "verbose" });
+    try p.addFlag(&verbose, .{ .short = 'v', .long = "verbose", .default = true });
     try testing.expectEqual(1, p.flags.items.len);
     try testing.expectEqual(ValueKind.boolean, p.flags.items[0].kind);
     try testing.expectEqual(@intFromPtr(p.flags.items[0].dest.?), @intFromPtr(&verbose));
     try testing.expectEqual('v', p.flags.items[0].short.?);
     try testing.expectEqualStrings("verbose", p.flags.items[0].long.?);
     try testing.expectEqualStrings("", p.flags.items[0].help);
+    try testing.expectEqual(true, p.flags.items[0].default.?.boolean);
+    try testing.expect(!verbose);
 }
 
 test "Parser.addFlag adds a flag to the parser with a short name" {
@@ -312,6 +314,55 @@ test "Parser.parse parses mixed flags and positionals" {
     try testing.expect(verbose);
     try testing.expectEqualStrings("file.txt", input);
     try testing.expectEqual(@as(i64, 4), count);
+}
+
+test "Parser.parse parses flags with defaults" {
+    var p = Parser.init(testing.allocator, "prog", .{});
+    defer p.deinit();
+
+    var verbose = true;
+    var count: i64 = 0;
+    var ratio: f64 = 0.0;
+    var name: []const u8 = "";
+    try p.addFlag(&verbose, .{ .short = 'v', .long = "verbose", .default = false });
+    try p.addFlag(&count, .{ .short = 'c', .long = "count", .default = 10 });
+    try p.addFlag(&ratio, .{ .short = 'r', .long = "ratio", .default = 1.5 });
+    try p.addFlag(&name, .{ .short = 'n', .long = "name", .default = "none" });
+
+    try testing.expectEqual(false, p.flags.items[0].default.?.boolean);
+    try testing.expectEqual(@as(i64, 10), p.flags.items[1].default.?.integer);
+    try testing.expectEqual(1.5, p.flags.items[2].default.?.float);
+    try testing.expectEqualStrings("none", p.flags.items[3].default.?.string);
+
+    try testing.expectEqual(true, verbose);
+    try testing.expectEqual(@as(i64, 0), count);
+    try testing.expectEqual(0.0, ratio);
+    try testing.expectEqualStrings("", name);
+
+    try p.parse(&.{});
+    try testing.expectEqual(false, verbose);
+    try testing.expectEqual(@as(i64, 10), count);
+    try testing.expectEqual(1.5, ratio);
+    try testing.expectEqualStrings("none", name);
+
+    try p.parse(&.{ "-v", "-c", "4", "--ratio=2.5", "--name", "file.txt" });
+    try testing.expect(verbose);
+    try testing.expectEqual(@as(i64, 4), count);
+    try testing.expectEqual(2.5, ratio);
+    try testing.expectEqualStrings("file.txt", name);
+
+    try p.parse(&.{});
+    try testing.expectEqual(false, verbose);
+    try testing.expectEqual(@as(i64, 10), count);
+    try testing.expectEqual(1.5, ratio);
+    try testing.expectEqualStrings("none", name);
+
+    try testing.expectError(error.MissingValue, p.parse(&.{"-c"}));
+    try testing.expectEqualStrings("-c", p.missing.?);
+    try testing.expectError(error.MissingValue, p.parse(&.{"--count"}));
+    try testing.expectEqualStrings("--count", p.missing.?);
+    try testing.expectError(error.MissingValue, p.parse(&.{"--name="}));
+    try testing.expectEqualStrings("--name", p.missing.?);
 }
 
 test "Parser.parse skips empty tokens" {

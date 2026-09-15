@@ -48,6 +48,7 @@ const yaap = @import("yaap");
 
 const Config = struct {
     input: []const u8 = "",
+    output: []const u8 = "",
     verbose: bool = false,
 };
 
@@ -56,12 +57,13 @@ pub fn main(init: std.process.Init) !void {
 
     var parser = yaap.Parser.init(init.gpa, "prog", .{
         .description = "Process a file",
-        .examples = &.{ "prog file.txt", "prog --help" },
+        .examples = &.{ "prog file.txt", "prog --help", "prog -o output.txt },
     });
     defer parser.deinit();
 
     try parser.addHelp(.{});
     try parser.addArg(&config.input, .{ .name = "input", .help = "File to process" });
+    try parser.addFlag(&config.output, .{ .short = 'o', .default = "text.out", .help = "Output file" })
 
     var buf: [1024]u8 = undefined;
     var writer = std.Io.File.stderr().writer(init.io, &buf);
