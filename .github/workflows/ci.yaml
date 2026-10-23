@@ -14,12 +14,9 @@ concurrency:
   cancel-in-progress: true
   queue: single
 
-env:
-  ZIG_VERSION: "0.16.0"
-
 jobs:
   lint:
-    name: Lint
+    name: Lint (${{ matrix.zig-version }})
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -28,6 +25,10 @@ jobs:
     defaults:
       run:
         shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        zig-version: ["0.16.0", "0.17.0"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,7 +38,7 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ matrix.zig-version }}
           cache-key: lint
 
       - name: Set up Python
@@ -49,7 +50,7 @@ jobs:
         uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
 
   test:
-    name: Test (${{ matrix.os }}, ${{ matrix.optimize }})
+    name: Test (${{ matrix.os }}, ${{ matrix.zig-version }}, ${{ matrix.optimize }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     permissions:
@@ -63,6 +64,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2022]
         optimize: [Debug, ReleaseSafe]
+        zig-version: ["0.16.0", "0.17.0"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,7 +74,7 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ matrix.zig-version }}
           cache-key: ${{ matrix.optimize }}
 
       - name: Test
